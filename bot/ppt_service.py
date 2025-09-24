@@ -217,7 +217,6 @@ class PPTService:
                     return
 
     def convert_to_pdf(self, pptx_path: str):
-        """Конвертирует PPTX в PDF и сохраняет в ту же директорию, что и презентация."""
         try:
             import subprocess
 
@@ -230,7 +229,14 @@ class PPTService:
 
             # Конвертируем с указанием директории для сохранения
             subprocess.run(
-                ['libreoffice', '--headless', '--convert-to', 'pdf', '--outdir', output_dir, pptx_path],
+                [
+                    'libreoffice',
+                    '--headless',
+                    '--convert-to',
+                    'pdf',
+                    '--outdir',
+                    output_dir, pptx_path
+                    ],
                 check=True
             )
 
