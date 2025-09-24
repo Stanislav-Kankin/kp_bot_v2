@@ -13,6 +13,9 @@ import os
 router = Router()
 
 
+file_mapping = {}
+
+
 @router.message(Command("start"))
 async def start(message: types.Message):
     await message.answer(
@@ -126,8 +129,7 @@ async def process_employee_licenses(message: types.Message, state: FSMContext):
 
 
 @router.callback_query(FormKP.on_premises)
-async def process_on_premises(callback: types.CallbackQuery,
-                              state: FSMContext):
+async def process_on_premises(callback: types.CallbackQuery, state: FSMContext):
     on_premises = "Да" if callback.data == "on_premises_yes" else "Нет"
     await state.update_data(on_premises=on_premises)
 
@@ -135,8 +137,7 @@ async def process_on_premises(callback: types.CallbackQuery,
     data = await state.get_data()
 
     # Создаем презентацию
-    await callback.message.answer(
-        "🔄 <b>Создаю коммерческое предложение...</b>", parse_mode='HTML')
+    await callback.message.answer("🔄 <b>Создаю коммерческое предложение...</b>", parse_mode='HTML')
 
     presentation_path = ppt_service.create_kp_presentation(
         data['template_type'],
@@ -145,19 +146,24 @@ async def process_on_premises(callback: types.CallbackQuery,
 
     if presentation_path and os.path.exists(presentation_path):
         file = FSInputFile(presentation_path)
+
+        # Генерируем уникальный идентификатор для файла
+        file_id = hashlib.md5(presentation_path.encode()).hexdigest()[:10]  # Используем первые 10 символов хэша
+        file_mapping[file_id] = presentation_path  # Сохраняем соответствие
+
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text="📄 Сделать PDF",
-                callback_data=f"make_pdf_{os.path.basename(presentation_path)}"
+                callback_data=f"make_pdf_{file_id}"
             )]
         ])
+
         await callback.message.answer_document(
             document=file,
             caption=f"✅ <b>Коммерческое предложение готово!</b>\n\n"
                     f"🏢 <b>Компания:</b> {data['company_name']}\n"
                     f"👥 <b>Лицензии кадровика:</b> {data['hr_licenses']}\n"
-                    f"👥 <b>Лицензии сотрудников:</b> {
-                        data['employee_licenses']}\n"
+                    f"👥 <b>Лицензии сотрудников:</b> {data['employee_licenses']}\n"
                     f"🏢 <b>On-premises:</b> {data['on_premises']}\n\n"
                     f"<i>Для создания нового КП нажмите /make_kp</i>",
             reply_markup=keyboard,
@@ -178,11 +184,19 @@ async def process_on_premises(callback: types.CallbackQuery,
 
 @router.callback_query(F.data.startswith("make_pdf_"))
 async def make_pdf_handler(callback: types.CallbackQuery):
-    filename = callback.data.replace("make_pdf_", "")
-    pptx_path = os.path.join("templates", "output", filename)
+    file_id = callback.data.replace("make_pdf_", "")
+    pptx_path = file_mapping.get(file_id)
 
-    await callback.message.answer(
-        "🔄 <b>Конвертирую в PDF...</b>", parse_mode='HTML')
+    if not pptx_path or not os.path.exists(pptx_path):
+        await callback.message.answer(
+            "❌ <b>Ошибка: файл не найден</b>\n"
+            "Попробуйте снова или обратитесь к администратору.",
+            parse_mode='HTML'
+        )
+        await callback.answer()
+        return
+
+    await callback.message.answer("🔄 <b>Конвертирую в PDF...</b>", parse_mode='HTML')
 
     # Конвертируем в PDF
     pdf_path = ppt_service.convert_to_pdf(pptx_path)
@@ -198,6 +212,7 @@ async def make_pdf_handler(callback: types.CallbackQuery):
         # Удаляем PDF и презентацию после отправки
         os.remove(pdf_path)
         os.remove(pptx_path)
+        file_mapping.pop(file_id, None)  # Удаляем запись из словаря
     else:
         await callback.message.answer(
             "❌ <b>Ошибка при конвертации в PDF</b>\n"
