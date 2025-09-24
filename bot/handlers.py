@@ -9,6 +9,8 @@ from bot.states import FormKP
 from bot.ppt_service import ppt_service
 import asyncio
 import os
+import hashlib
+
 
 router = Router()
 
