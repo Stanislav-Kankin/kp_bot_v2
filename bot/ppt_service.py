@@ -1,15 +1,80 @@
 from pptx import Presentation
+from pptx.util import Pt
+from pptx.enum.text import MSO_AUTO_SIZE
 import os
 from datetime import datetime
 import re
-
+import logging
 
 class PPTService:
     def __init__(self):
         self.templates_path = "templates/"
-
+        # Основной шрифт для всего документа
+        self.primary_font = 'Montserrat'
+        # Запасные шрифты на случай отсутствия Montserrat
+        self.fallback_fonts = ['Arial', 'Helvetica', 'Times New Roman', 'Calibri']
+        self.logger = logging.getLogger('PPTService')
+    
+    def _ensure_consistent_fonts(self, prs):
+        """Устанавливает единый шрифт Montserrat для всего текста в презентации"""
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                self._set_shape_font(shape)
+    
+    def _set_shape_font(self, shape):
+        """Устанавливает шрифт Montserrat для фигуры и всего её содержимого"""
+        if not shape.has_text_frame:
+            return
+            
+        text_frame = shape.text_frame
+        for paragraph in text_frame.paragraphs:
+            for run in paragraph.runs:
+                # Сохраняем оригинальные свойства форматирования
+                original_size = run.font.size
+                original_bold = run.font.bold
+                original_italic = run.font.italic
+                original_color = run.font.color.rgb if run.font.color and run.font.color.rgb else None
+                original_underline = run.font.underline
+                
+                # Устанавливаем шрифт Montserrat
+                run.font.name = self.primary_font
+                
+                # Восстанавливаем форматирование
+                if original_size:
+                    run.font.size = original_size
+                run.font.bold = original_bold
+                run.font.italic = original_italic
+                run.font.underline = original_underline
+                if original_color:
+                    run.font.color.rgb = original_color
+    
+    def _set_table_font(self, table):
+        """Устанавливает шрифт Montserrat для всей таблицы"""
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text_frame:
+                    text_frame = cell.text_frame
+                    for paragraph in text_frame.paragraphs:
+                        for run in paragraph.runs:
+                            # Сохраняем оригинальные свойства
+                            original_size = run.font.size
+                            original_bold = run.font.bold
+                            original_italic = run.font.italic
+                            original_color = run.font.color.rgb if run.font.color and run.font.color.rgb else None
+                            
+                            # Устанавливаем шрифт Montserrat
+                            run.font.name = self.primary_font
+                            
+                            # Восстанавливаем форматирование
+                            if original_size:
+                                run.font.size = original_size
+                            run.font.bold = original_bold
+                            run.font.italic = original_italic
+                            if original_color:
+                                run.font.color.rgb = original_color
+    
     def create_kp_presentation(self, template_type: str, data: dict):
-        """Создает КП на основе шаблона с сохранением форматирования"""
+        """Создает КП на основе шаблона с единым шрифтом Montserrat"""
         try:
             # Выбираем шаблон
             if template_type == "long":
@@ -24,6 +89,9 @@ class PPTService:
 
             # Загружаем шаблон
             prs = Presentation(template_path)
+            
+            # Устанавливаем единый шрифт Montserrat для всей презентации
+            self._ensure_consistent_fonts(prs)
 
             # Заменяем название компании
             self._replace_company_name(prs, data['company_name'])
@@ -35,8 +103,7 @@ class PPTService:
             self._update_price_text(prs, total_price)
 
             # Сохраняем результат
-            output_filename = f"КП_{data[
-                'company_name']}_{datetime.now().strftime('%d%m%Y_%H%M')}.pptx"
+            output_filename = f"КП_{data['company_name']}_{datetime.now().strftime('%d%m%Y_%H%M')}.pptx"
             output_path = os.path.join(
                 self.templates_path, "output", output_filename)
 
@@ -62,7 +129,7 @@ class PPTService:
             print(f"Ошибка при замене названия компании: {e}")
 
     def _safe_text_replace(self, shape, old_text, new_text):
-        """Безопасная замена текста с сохранением форматирования"""
+        """Безопасная замена текста с сохранением форматирования и установкой Montserrat"""
         if not shape.has_text_frame:
             return
 
@@ -74,15 +141,22 @@ class PPTService:
                     original_font = run.font
                     original_size = original_font.size
                     original_bold = original_font.bold
+                    original_italic = original_font.italic
                     original_color = original_font.color.rgb if original_font.color and original_font.color.rgb else None
+                    original_underline = original_font.underline
 
                     # Заменяем текст
                     run.text = run.text.replace(old_text, new_text)
 
+                    # Устанавливаем шрифт Montserrat
+                    run.font.name = self.primary_font
+                    
                     # Восстанавливаем форматирование
                     if original_size:
                         run.font.size = original_size
                     run.font.bold = original_bold
+                    run.font.italic = original_italic
+                    run.font.underline = original_underline
                     if original_color:
                         run.font.color.rgb = original_color
 
@@ -102,7 +176,9 @@ class PPTService:
                                         original_font = run.font
                                         original_size = original_font.size
                                         original_bold = original_font.bold
+                                        original_italic = original_font.italic
                                         original_color = original_font.color.rgb if original_font.color and original_font.color.rgb else None
+                                        original_underline = original_font.underline
 
                                         # Заменяем всё число с ₽
                                         run.text = re.sub(
@@ -111,10 +187,15 @@ class PPTService:
                                             run.text
                                         )
 
+                                        # Устанавливаем шрифт Montserrat
+                                        run.font.name = self.primary_font
+                                        
                                         # Восстанавливаем форматирование
                                         if original_size:
                                             run.font.size = original_size
                                         run.font.bold = original_bold
+                                        run.font.italic = original_italic
+                                        run.font.underline = original_underline
                                         if original_color:
                                             run.font.color.rgb = original_color
                             return
@@ -132,6 +213,8 @@ class PPTService:
                         # Третья таблица (таблица с расчетами)
                         if table_count == 3:
                             table = shape.table
+                            # Устанавливаем шрифт для таблицы
+                            self._set_table_font(table)
                             return self._fill_calculation_table(table, data)
             return 0
         except Exception as e:
@@ -203,20 +286,28 @@ class PPTService:
                     original_font = run.font
                     original_size = original_font.size
                     original_bold = original_font.bold
+                    original_italic = original_font.italic
                     original_color = original_font.color.rgb if original_font.color and original_font.color.rgb else None
+                    original_underline = original_font.underline
 
                     # Заменяем текст
                     run.text = new_text
 
+                    # Устанавливаем шрифт Montserrat
+                    run.font.name = self.primary_font
+                    
                     # Восстанавливаем форматирование
                     if original_size:
                         run.font.size = original_size
                     run.font.bold = original_bold
+                    run.font.italic = original_italic
+                    run.font.underline = original_underline
                     if original_color:
                         run.font.color.rgb = original_color
                     return
 
     def convert_to_pdf(self, pptx_path: str):
+        """Конвертирует PPTX в PDF с упрощенными параметрами"""
         try:
             import subprocess
 
@@ -227,22 +318,51 @@ class PPTService:
             pdf_filename = os.path.basename(pptx_path).replace('.pptx', '.pdf')
             pdf_path = os.path.join(output_dir, pdf_filename)
 
-            # Конвертируем с указанием директории для сохранения
-            subprocess.run(
-                [
-                    'libreoffice',
-                    '--headless',
-                    '--convert-to',
-                    'pdf',
-                    '--outdir',
-                    output_dir, pptx_path
-                    ],
-                check=True
-            )
+            print(f"🔄 Начинаю конвертацию: {pptx_path} -> {pdf_path}")
 
-            return pdf_path
+            # Простая команда без сложных параметров
+            command = [
+                'libreoffice',
+                '--headless',
+                '--convert-to', 'pdf',
+                '--outdir', output_dir,
+                pptx_path
+            ]
+            
+            print(f"🔧 Выполняю команду: {' '.join(command)}")
+            
+            result = subprocess.run(
+                command,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            
+            print(f"✅ Конвертация завершена успешно")
+            print(f"📋 STDOUT: {result.stdout}")
+            
+            if result.stderr:
+                print(f"⚠️  STDERR: {result.stderr}")
+
+            # Проверяем, что файл создался
+            if os.path.exists(pdf_path):
+                print(f"📄 PDF создан: {pdf_path}")
+                return pdf_path
+            else:
+                print(f"❌ PDF файл не найден по пути: {pdf_path}")
+                return None
+
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Ошибка выполнения команды: {e}")
+            print(f"🔧 STDOUT: {e.stdout}")
+            print(f"🔧 STDERR: {e.stderr}")
+            return None
+        except subprocess.TimeoutExpired:
+            print("⏰ Таймаут конвертации в PDF")
+            return None
         except Exception as e:
-            print(f"Ошибка при конвертации в PDF: {e}")
+            print(f"❌ Неожиданная ошибка при конвертации в PDF: {e}")
             return None
 
 
